@@ -138,7 +138,7 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # 🤖 BACKEND UTILITIES DATA MATRIX
 # -----------------------------------------------------------------------------
-API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6LJiaXdHWlgF3iOMvL0CbQ25-d0QhBUO5G0klffby4X2Q")
+GOOGLE_API_KEY = "AQ.Ab8RN6LJiaXdHWlgF3iOMvL0CbQ25-d0QhBUO5G0klffby4X2Q"
 try:
     client = genai.Client(api_key=API_KEY)
 except Exception:
