@@ -1,0 +1,7 @@
+streamlit
+pandas
+pdfplumber
+openpyxl
+pillow
+requests
+matplotlib
