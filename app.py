@@ -5,10 +5,17 @@ import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 import os
 import io
+import requests
 import google.genai as genai
+from serpapi import GoogleSearch
 
 # -----------------------------------------------------------------------------
-# 🎨 DYNAMIC STRUCTURAL HIGH-CONTRAST GLOW THEME
+# 🔑 SERPAPI KEY SETTING
+# -----------------------------------------------------------------------------
+SERPAPI_KEY = "abc91768813961c26801b458c141039dbe48d6cf7d1c77262c45234081c795b4"
+
+# -----------------------------------------------------------------------------
+# 🎨 EXACT ORIGINAL INTERFACE THEME & CSS (PRESERVED)
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title="CatalogAI Enterprise Suite", layout="wide", initial_sidebar_state="expanded")
 
@@ -19,12 +26,11 @@ st.markdown("""
         background-color: #0e1117 !important;
     }
     
-    /* Standard Text Target Visibility overrides */
     .stMarkdown, p, span, h1, h2, h3, h4, h5, h6 {
         color: #f3f4f6 !important;
     }
 
-    /* 📂 PERFECT DARK STYLE UPLOAD CONTAINER FIX (Screenshot 2 Fix) */
+    /* Uploader Layout */
     div[data-testid="stFileUploader"] {
         background-color: #161b22 !important;
         border: 2px dashed #00dfd8 !important;
@@ -35,14 +41,12 @@ st.markdown("""
         background-color: #161b22 !important;
         border: none !important;
     }
-    /* Explicit Label text for drag and drop descriptor */
     div[data-testid="stFileUploader"] label p {
         color: #00dfd8 !important;
         font-size: 16px !important;
         font-weight: bold !important;
     }
     
-    /* 🔴 THE UPLOAD ACTION BUTTON: STAYS RED */
     div[data-testid="stFileUploader"] button {
         background-color: #ff0000 !important;
         color: #ffffff !important;
@@ -53,15 +57,13 @@ st.markdown("""
         box-shadow: 0px 4px 10px rgba(255, 0, 0, 0.4) !important;
         transition: all 0.2s ease-in-out !important;
     }
-    
-    /* 🟢 UPLOAD HOVER DETECTOR STATE */
     div[data-testid="stFileUploader"] button:hover {
         background-color: #00ff00 !important;
         color: #000000 !important;
         box-shadow: 0px 4px 15px rgba(0, 255, 0, 0.6) !important;
     }
 
-    /* 🎯 GLOBAL WORKBENCH WORKSPACE BUTTON STYLING (SHINY NEON STYLE - Screenshot 1 Fix) */
+    /* Action Buttons UI */
     div.stButton > button {
         background: linear-gradient(135deg, #7928ca 0%, #ff007f 100%) !important;
         color: #ffffff !important;
@@ -85,7 +87,7 @@ st.markdown("""
         border: 1px solid #ffffff !important;
     }
 
-    /* Sidebar controls contrast enhancements */
+    /* Sidebar Custom Inputs */
     div[data-testid="stSidebar"] div[data-testid="stTextInput"] input,
     div[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] {
         background-color: #1f2937 !important;
@@ -98,7 +100,7 @@ st.markdown("""
         font-weight: bold !important;
     }
     
-    /* Main Layout Branding Items */
+    /* Title Bar Styling */
     .main-title-container { text-align: center; padding: 15px 0; }
     .main-title {
         font-size: 45px; font-weight: 900;
@@ -111,7 +113,7 @@ st.markdown("""
         margin: 10px auto 20px auto; border-radius: 10px;
     }
     
-    /* Segment block wrappers */
+    /* Metrics Cards */
     .kpi-card-pink { background: #161b22; padding: 20px; border-radius: 14px; border-top: 5px solid #ff007f; }
     .kpi-card-yellow { background: #161b22; padding: 20px; border-radius: 14px; border-top: 5px solid #f59e0b; }
     .kpi-card-cyan { background: #161b22; padding: 20px; border-radius: 14px; border-top: 5px solid #00dfd8; }
@@ -136,64 +138,128 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 🤖 BACKEND UTILITIES DATA MATRIX
+# 🛡️ UTILITIES & IMAGE FETCHING
 # -----------------------------------------------------------------------------
 GOOGLE_API_KEY = "AQ.Ab8RN6LJiaXdHWlgF3iOMvL0CbQ25-d0QhBUO5G0klffby4X2Q"
 try:
-    client = genai.Client(api_key=API_KEY)
+    client = genai.Client(api_key=GOOGLE_API_KEY)
 except Exception:
     client = None
 
 product_images = {
-    "milk": "images/milk.jpg", "paneer": "images/paneer.jpg",
-    "egg": "images/egg.jpg", "water": "images/water.jpg",
-    "snacks": "images/snacks.jpg", "curd": "images/curd.jpg"
+    "egg": "images/egg.jpg",
+    "curd": "images/curd.jpg",
+    "paneer": "images/paneer.jpg",
+    "milk": "images/milk.jpg",
+    "water": "images/water.jpg",
+    "snacks": "images/snacks.jpg",
+    "cigarette": "images/cigarette.jpg",
+    "default": "images/default.jpg"
 }
-
-def get_product_image(product_name):
-    p_lower = str(product_name).lower()
-    for key, path in product_images.items():
-        if key in p_lower:
-            return path
-    return None
 
 def create_placeholder_image(label_text="Product Asset Ready"):
     img = Image.new('RGB', (400, 400), color='#161b22')
     d = ImageDraw.Draw(img)
     d.rectangle([10, 10, 390, 390], outline="#00dfd8", width=3)
-    d.text((90, 185), "✨ CATALOG VISUAL READY", fill='#ffffff')
+    d.text((80, 185), "✨ CATALOG VISUAL READY", fill='#ffffff')
     return img
 
-def create_marketing_poster(product_name, category, price):
-    canvas = Image.new('RGB', (600, 600), color='#0e1117')
-    draw = ImageDraw.Draw(canvas)
-    draw.rectangle([20, 20, 580, 580], outline="#ff007f", width=4)
-    draw.text((50, 55), "EXCLUSIVE DEALS", fill="#f59e0b")
+@st.cache_data(show_spinner="Parsing catalog PDF database...")
+def parse_pdf_report(uploaded_file_bytes):
+    all_data = []
+    with pdfplumber.open(io.BytesIO(uploaded_file_bytes)) as pdf:
+        for page in pdf.pages:
+            table = page.extract_table()
+            if table:
+                for row in table:
+                    all_data.append(row)
+    if all_data:
+        all_data = all_data[1:]
+        headers = ["Product Code", "Batch ID", "Product Name", "Category", "UOM", "Quantity", "Sales Amount", "Purchase Amount", "Profit"]
+        df = pd.DataFrame(all_data, columns=headers)
+        numeric_cols = ["Quantity", "Sales Amount", "Purchase Amount", "Profit"]
+        for col in numeric_cols:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df
+    return None
+
+@st.cache_data(show_spinner=False)
+def fetch_dynamic_product_image(product_name):
+    p_lower = str(product_name).lower().strip()
     
-    words = product_name.upper().split()
-    lines = []
-    current_line = []
+    for key, path in product_images.items():
+        if key in p_lower and os.path.exists(path):
+            try:
+                return Image.open(path)
+            except Exception:
+                pass
+
+    if SERPAPI_KEY and SERPAPI_KEY != "YOUR_SERPAPI_KEY_HERE":
+        try:
+            search_params = {
+                "q": product_name,
+                "engine": "google_images",
+                "api_key": SERPAPI_KEY,
+                "num": "1"
+            }
+            search = GoogleSearch(search_params)
+            results = search.get_dict()
+            images_results = results.get("images_results", [])
+            
+            if images_results:
+                image_url = images_results[0].get("original") or images_results[0].get("thumbnail")
+                if image_url:
+                    res = requests.get(image_url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+                    if res.status_code == 200:
+                        return Image.open(io.BytesIO(res.content))
+        except Exception:
+            pass
+
+    return create_placeholder_image(product_name)
+
+# 🎨 FIX 1: HIGH-CONTRAST PROMOTION CARD GENERATOR (HIGH VISIBILITY)
+def create_marketing_poster(product_name, category, price, uom="PC"):
+    canvas = Image.new('RGB', (800, 800), color='#111827')
+    draw = ImageDraw.Draw(canvas)
+    
+    # Outer Border Glow
+    draw.rectangle([15, 15, 785, 785], outline="#00dfd8", width=6)
+    draw.rectangle([25, 25, 775, 775], outline="#ff007f", width=3)
+    
+    # Top Header
+    draw.rectangle([40, 40, 760, 110], fill="#ff007f")
+    draw.text((80, 55), "⚡ EXCLUSIVE WHOLESALE DEAL ⚡", fill="#ffffff")
+    
+    # Product Title (Wrapped)
+    words = str(product_name).upper().split()
+    lines, current_line = [], []
     for word in words:
-        if len(" ".join(current_line + [word])) <= 22:
+        if len(" ".join(current_line + [word])) <= 20:
             current_line.append(word)
         else:
             lines.append(" ".join(current_line))
             current_line = [word]
     lines.append(" ".join(current_line))
     
-    y_offset = 110
+    y_offset = 160
     for line in lines[:3]: 
-        draw.text((50, y_offset), line, fill="white")
-        y_offset += 45
+        draw.text((60, y_offset), line, fill="#ffffff")
+        y_offset += 55
         
-    draw.text((50, 270), f"Category: {category}", fill="#93c5fd")
-    draw.rectangle([50, 330, 390, 420], fill="#ef4444")
-    draw.text((75, 355), f"SPECIAL PRICE: INR {price}/-", fill="white")
+    draw.text((60, y_offset + 20), f"Category: {category}", fill="#00dfd8")
+    draw.text((60, y_offset + 65), f"Unit: {uom}", fill="#f59e0b")
+    
+    # Bright Price Banner (High Contrast)
+    price_box_y = y_offset + 130
+    draw.rectangle([40, price_box_y, 760, price_box_y + 120], fill="#ff007f")
+    draw.text((70, price_box_y + 35), f"SPECIAL PRICE: INR {price}/-", fill="#ffffff")
+    
+    draw.text((60, 720), "🌐 ORDER DIRECTLY VIA CATALOGAI ENTERPRISE", fill="#9ca3af")
     return canvas
 
 def generate_ai_description(product_name, category):
     prompt = f"Write a premium 2-line commercial description for '{product_name}' under '{category}'."
-    if client and API_KEY != "YOUR_GEMINI_API_KEY_HERE":
+    if client:
         try:
             response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
             return response.text.strip()
@@ -202,31 +268,17 @@ def generate_ai_description(product_name, category):
     return f"Premium industry-standard inventory listing for {product_name} in {category} segment."
 
 # -----------------------------------------------------------------------------
-# 📑 FRONTEND RUNTIME LAYER
+# 📑 FRONTEND LAYOUT
 # -----------------------------------------------------------------------------
 uploaded_file = st.file_uploader("📂 Drag & Drop Inventory or Sales PDF Report Here", type=["pdf"], key="catalog_pdf_uploader_master")
 
 if uploaded_file is not None:
-    st.success("✅ Document uploaded and parsed successfully!")
-    
-    all_data = []
-    with pdfplumber.open(uploaded_file) as pdf:
-        for page in pdf.pages:
-            table = page.extract_table()
-            if table:
-                for row in table:
-                    all_data.append(row)
+    file_bytes = uploaded_file.read()
+    df = parse_pdf_report(file_bytes)
 
-    if all_data:
-        all_data = all_data[1:]
-        headers = ["Product Code", "Batch ID", "Product Name", "Category", "UOM", "Quantity", "Sales Amount", "Purchase Amount", "Profit"]
-        df = pd.DataFrame(all_data, columns=headers)
+    if df is not None and not df.empty:
+        st.success("✅ Document uploaded and parsed successfully!")
 
-        numeric_cols = ["Quantity", "Sales Amount", "Purchase Amount", "Profit"]
-        for col in numeric_cols:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        # Operational Metrics
         st.markdown("### 📊 Live Operations Metrics")
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -236,7 +288,6 @@ if uploaded_file is not None:
         with c3:
             st.markdown(f'<div class="kpi-card-cyan"><div>📈 Net Realized Yield</div><div style="color: #fff; font-size: 24px; font-weight: bold;">₹ {df["Profit"].sum():,.2f}</div></div>', unsafe_allow_html=True)
 
-        # Sidebar Filters Matrix
         st.sidebar.markdown("### 🎯 Analytics Panel")
         search = st.sidebar.text_input("🔍 Search SKU Name", key="global_search_sku")
         filtered_df = df.copy()
@@ -249,14 +300,10 @@ if uploaded_file is not None:
         if category != "All":
             filtered_df = filtered_df[filtered_df["Category"] == category]
 
-        # Table Section
         st.write("---")
         st.markdown('<div class="table-header-title">📋 Catalog Database Master Index</div>', unsafe_allow_html=True)
         st.dataframe(filtered_df, use_container_width=True)
 
-        # -----------------------------------------------------------------------------
-        # 💎 THE CONTENT STUDIO GENERATOR WORKBENCH
-        # -----------------------------------------------------------------------------
         st.write("---")
         st.markdown("### 💎 Content Studio Workbench")
 
@@ -273,12 +320,7 @@ if uploaded_file is not None:
             left, right = st.columns([1, 2.2])
 
             with left:
-                image_path = get_product_image(selected_product)
-                if image_path and os.path.exists(image_path):
-                    try: display_image = Image.open(image_path)
-                    except Exception: display_image = create_placeholder_image(clean_name)
-                else:
-                    display_image = create_placeholder_image(clean_name)
+                display_image = fetch_dynamic_product_image(clean_name)
                 st.image(display_image, use_container_width=True)
 
             with right:
@@ -303,46 +345,108 @@ if uploaded_file is not None:
                     if st.session_state["current_desc"]:
                         st.info(st.session_state["current_desc"])
                 
+                # 💬 FIX 2: ENHANCED & COMPREHENSIVE WHATSAPP BROADCAST SCRIPT
                 with tab2:
                     if st.button("💬 Generate WhatsApp Broadcast Script", key=f"btn_wa_{clean_name}"):
-                        desc_text = st.session_state["current_desc"] if st.session_state["current_desc"] else "Special high priority offers live now!"
-                        whatsapp_msg = f"""*🔥 LIVE OFFER: {clean_name.upper()}!*\n\n📦 *Item:* {clean_name}\n💰 *Price:* ₹ {selected_row['Sales Amount']:,}\n\n✨ *Insights:* {desc_text}"""
-                        st.text_area("📋 Copyable Text Template:", value=whatsapp_msg, height=120)
+                        desc_text = st.session_state["current_desc"] if st.session_state["current_desc"] else "Premium quality inventory ready for immediate B2B dispatch."
+                        
+                        code_val = selected_row.get('Product Code', 'N/A')
+                        batch_val = selected_row.get('Batch ID', 'N/A')
+                        uom_val = selected_row.get('UOM', 'PC')
+                        qty_val = selected_row.get('Quantity', 0)
+                        price_val = selected_row.get('Sales Amount', 0)
+                        
+                        whatsapp_msg = f"""🔥 *EXCLUSIVE B2B STOCK OFFER: {clean_name.upper()}* 🔥
+
+📌 *PRODUCT SPECIFICATIONS:*
+• *Item Name:* {clean_name}
+• *Product Code SKU:* `{code_val}`
+• *Batch ID:* `{batch_val}`
+• *Category:* {clean_category}
+
+💰 *COMMERCIAL & PRICING TERMS:*
+• *Offer Price:* ₹ {price_val:,.2f} per {uom_val}
+• *Available Quantity:* {qty_val} {uom_val}(s) in stock
+• *Minimum Order Quantity:* 1 Pack / Box
+
+📝 *KEY HIGHLIGHTS & SUMMARY:*
+{desc_text}
+
+⚡ *WHY PARTNER WITH US?*
+✅ Guaranteed Fresh Batch & Quality Assurance
+✅ Fast Dispatch & B2B Logistics Support
+✅ Unbeatable Wholesale Profit Margins
+
+📞 *ORDER NOW:*
+Reply *'BOOK NOW'* or call our sales desk directly to secure your stock!
+🌐 *CatalogAI Enterprise Suite*"""
+                        st.text_area("📋 Copyable WhatsApp Broadcast Message:", value=whatsapp_msg, height=290)
                 
                 with tab3:
                     if st.button("🖼️ Render Automated Promotion Layout Card", key=f"btn_post_{clean_name}"):
-                        poster_img = create_marketing_poster(clean_name, clean_category, selected_row['Sales Amount'])
+                        uom_val = selected_row.get('UOM', 'PC')
+                        poster_img = create_marketing_poster(clean_name, clean_category, selected_row['Sales Amount'], uom_val)
                         buf = io.BytesIO()
                         poster_img.save(buf, format="PNG")
-                        st.image(buf.getvalue(), width=310)
+                        st.image(buf.getvalue(), width=450)
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # Business Intelligence System Graphs
+        # -----------------------------------------------------------------------------
+        # 📊 FIX 3: BUSINESS INTELLIGENCE DASHBOARD (NO OVERLAP & NO CUT-OFFS)
+        # -----------------------------------------------------------------------------
         st.write("---")
         st.markdown("### 📊 Advanced Business Intelligence System")
+        
         c_an1, c_an2 = st.columns(2)
+        
         with c_an1:
             if st.button("📈 Initialize Product Revenue Distribution Breakdown", key="revenue_dist_btn"):
-                top_products = filtered_df.groupby("Product Name")["Sales Amount"].sum().sort_values(ascending=False).head(8)
-                fig, ax = plt.subplots(figsize=(6, 3.5))
+                # Filter Top 6 items so bars are neat
+                top_products = filtered_df.groupby("Product Name")["Sales Amount"].sum().sort_values(ascending=False).head(6)
+                
+                fig, ax = plt.subplots(figsize=(7, 4.5))
                 fig.patch.set_facecolor('#0e1117')
-                ax.set_facecolor('#1f2937')
-                ax.bar(range(len(top_products)), top_products.values, color="#ff007f")
-                ax.tick_params(colors='white')
-                ax.set_title("Top Operational Grossing Revenue Pipelines", color="white", weight="bold")
+                ax.set_facecolor('#161b22')
+                
+                # Bar spacing & width adjust
+                bars = ax.bar(range(len(top_products)), top_products.values, color="#ff007f", width=0.45)
+                
+                # Data labels on top of bars
+                for bar in bars:
+                    yval = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2.0, yval + (max(top_products.values)*0.02), f'₹{yval:,.0f}', ha='center', va='bottom', color='white', fontsize=8, fontweight='bold')
+
+                ax.tick_params(colors='white', labelsize=8)
+                ax.set_title("Top Operational Grossing Revenue Pipelines", color="white", weight="bold", fontsize=11, pad=12)
                 ax.set_xticks(range(len(top_products)))
-                ax.set_xticklabels(top_products.index, rotation=22, ha="right", color="white")
+                
+                # Multi-line wrapped labels to prevent overlap
+                labels = ["\n".join(str(name).split()[:3]) for name in top_products.index]
+                ax.set_xticklabels(labels, rotation=0, color="white")
+                
+                plt.tight_layout()
                 st.pyplot(fig)
         
         with c_an2:
             if st.button("💰 Initialize Operational Net Margin Audit Layout", key="margin_audit_btn"):
-                profit_data = filtered_df.groupby("Product Name")["Profit"].sum().sort_values(ascending=False).head(8)
-                fig3, ax3 = plt.subplots(figsize=(6, 3.5))
+                profit_data = filtered_df.groupby("Product Name")["Profit"].sum().sort_values(ascending=False).head(6)
+                
+                fig3, ax3 = plt.subplots(figsize=(7, 4.5))
                 fig3.patch.set_facecolor('#0e1117')
-                ax3.set_facecolor('#1f2937')
-                ax3.bar(range(len(profit_data)), profit_data.values, color="#00dfd8")
-                ax3.tick_params(colors='white')
-                ax3.set_title("Top High Density Yield Matrix SKUs", color="white", weight="bold")
+                ax3.set_facecolor('#161b22')
+                
+                bars3 = ax3.bar(range(len(profit_data)), profit_data.values, color="#00dfd8", width=0.45)
+                
+                for bar in bars3:
+                    yval = bar.get_height()
+                    ax3.text(bar.get_x() + bar.get_width()/2.0, yval + (max(profit_data.values)*0.02), f'₹{yval:,.0f}', ha='center', va='bottom', color='white', fontsize=8, fontweight='bold')
+
+                ax3.tick_params(colors='white', labelsize=8)
+                ax3.set_title("Top Operational Net Margin Audit Layout", color="white", weight="bold", fontsize=11, pad=12)
                 ax3.set_xticks(range(len(profit_data)))
-                ax3.set_xticklabels(profit_data.index, rotation=22, ha="right", color="white")
+                
+                labels3 = ["\n".join(str(name).split()[:3]) for name in profit_data.index]
+                ax3.set_xticklabels(labels3, rotation=0, color="white")
+                
+                plt.tight_layout()
                 st.pyplot(fig3)
